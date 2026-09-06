@@ -89,7 +89,8 @@ export async function openApprovalModal({
             type: "input",
             block_id: APPROVAL_REASON_BLOCK_ID,
             optional: true,
-            label: { type: "plain_text", text: "Reason (optional)" },
+            // Slack appends its own "(optional)" for an optional input.
+            label: { type: "plain_text", text: "Reason" },
             element: {
               type: "plain_text_input",
               action_id: APPROVAL_REASON_ACTION_ID,
