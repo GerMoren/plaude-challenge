@@ -25,8 +25,8 @@ describe("requestHumanApproval hook", () => {
     await resumeHook(hook.token, { approved: true, comment: "looks fine" });
 
     const result = await run.returnValue;
-    expect(result).toContain("Approved by human reviewer");
-    expect(result).toContain("looks fine");
+    expect(result).toMatchObject({ approved: true, comment: "looks fine" });
+    expect(result).toHaveProperty("approvalReceipt");
   });
 
   it("resolves with a rejection message once resumed as rejected", async () => {
@@ -40,8 +40,8 @@ describe("requestHumanApproval hook", () => {
     await resumeHook(hook.token, { approved: false, comment: "not authorized" });
 
     const result = await run.returnValue;
-    expect(result).toContain("Rejected by human reviewer");
-    expect(result).toContain("not authorized");
+    // A rejection carries no receipt: nothing was cleared to spend.
+    expect(result).toEqual({ approved: false, comment: "not authorized" });
   });
 
   it("uses the tool call id as the hook token", async () => {
