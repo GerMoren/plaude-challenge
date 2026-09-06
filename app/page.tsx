@@ -8,6 +8,7 @@ import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chat-message";
+import { selectToolCallOwners } from "@/lib/tool-calls";
 import { SendHorizonal, ShieldHalf } from "lucide-react";
 
 const RUN_ID_KEY = "plaude-active-run-id";
@@ -40,6 +41,7 @@ export default function Home() {
   });
 
   const isBusy = status === "streaming" || status === "submitted";
+  const toolCallOwners = useMemo(() => selectToolCallOwners(messages), [messages]);
 
   function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -73,7 +75,11 @@ export default function Home() {
             </p>
           )}
           {messages.map((message) => (
-            <ChatMessage key={message.id} message={message} />
+            <ChatMessage
+              key={message.id}
+              message={message}
+              toolCallOwners={toolCallOwners}
+            />
           ))}
         </div>
       </ScrollArea>

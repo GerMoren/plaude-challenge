@@ -52,7 +52,13 @@ function ApprovalCard({ output, errored }: { output?: string; errored?: boolean 
   );
 }
 
-export function ChatMessage({ message }: { message: UIMessage }) {
+export function ChatMessage({
+  message,
+  toolCallOwners,
+}: {
+  message: UIMessage;
+  toolCallOwners?: Map<string, string>;
+}) {
   const isUser = message.role === "user";
 
   return (
@@ -86,6 +92,11 @@ export function ChatMessage({ message }: { message: UIMessage }) {
           }
           if (part.type === "tool-requestHumanApproval") {
             const toolPart = part as ToolPart;
+            const owner = toolPart.toolCallId
+              ? toolCallOwners?.get(toolPart.toolCallId)
+              : undefined;
+            // A resumed run can replay the same call in a second message.
+            if (owner && owner !== message.id) return null;
             return (
               <ApprovalCard
                 key={i}
