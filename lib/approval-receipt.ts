@@ -14,7 +14,10 @@ const TTL_MS = 15 * 60 * 1000;
  */
 export type ApprovalClaim = {
   toolCallId: string;
+  scenario: string;
   amountUsd: number;
+  /** Present for refunds: an approval is for one order, not for an amount. */
+  orderId?: string;
   issuedAt: number;
 };
 
@@ -38,7 +41,13 @@ export function signApproval(claim: ApprovalClaim): string {
 
 export function verifyApproval(
   receipt: string | undefined,
-  expected: { toolCallId?: string; amountUsd: number; now?: number },
+  expected: {
+    toolCallId?: string;
+    scenario: string;
+    amountUsd: number;
+    orderId?: string;
+    now?: number;
+  },
 ): { valid: true } | { valid: false; reason: string } {
   if (!receipt) return { valid: false, reason: "No approval receipt was provided." };
 
@@ -70,6 +79,19 @@ export function verifyApproval(
       valid: false,
       reason: `That approval was for $${claim.amountUsd}, not $${expected.amountUsd}.`,
     };
+  }
+
+  // Without this, an approval granted under the high-value rule (where $900 is
+  // under the threshold and clears on its own) could be spent on a $900 refund,
+  // which the refund rule says a human has to sign.
+  if (claim.scenario !== expected.scenario) {
+    return { valid: false, reason: "That approval was granted for a different kind of request." };
+  }
+
+  // An approval is for one order. Otherwise the same signature covers every
+  // order that happens to cost the same.
+  if (expected.orderId && claim.orderId !== expected.orderId) {
+    return { valid: false, reason: "That approval was for a different order." };
   }
 
   if (expected.toolCallId && claim.toolCallId !== expected.toolCallId) {

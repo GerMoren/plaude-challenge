@@ -1,5 +1,5 @@
 import { after } from "next/server";
-import { approvalHook } from "@/lib/hooks/approval-hook";
+import { approvalHook } from "@/lib/workflow/approval-hook";
 import { verifySlackSignature } from "@/lib/slack/verify";
 import {
   APPROVE_ACTION_ID,

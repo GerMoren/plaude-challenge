@@ -69,7 +69,51 @@ describe("issueRefund", () => {
   });
 
   it("refuses a genuine receipt issued for a smaller amount", async () => {
-    const receipt = signApproval({ toolCallId: "call_1", amountUsd: 100, issuedAt: Date.now() });
+    const receipt = signApproval({
+      toolCallId: "call_1",
+      scenario: "refund",
+      amountUsd: 100,
+      orderId: "1",
+      issuedAt: Date.now(),
+    });
+    const result = await issueRefund({
+      orderId: "1",
+      amountUsd: 480,
+      reason: "cancelled plan",
+      approvalReceipt: receipt,
+    });
+
+    expect(result.issued).toBe(false);
+    expect(getOrder("1")?.status).toBe("delivered");
+  });
+
+  it("refuses a receipt minted for a different order", async () => {
+    const receipt = signApproval({
+      toolCallId: "call_1",
+      scenario: "refund",
+      amountUsd: 480,
+      orderId: "123",
+      issuedAt: Date.now(),
+    });
+    const result = await issueRefund({
+      orderId: "1",
+      amountUsd: 480,
+      reason: "cancelled plan",
+      approvalReceipt: receipt,
+    });
+
+    expect(result.issued).toBe(false);
+    expect(getOrder("1")?.status).toBe("delivered");
+  });
+
+  it("refuses an approval granted under a different policy", async () => {
+    // The high-value rule clears $480 on its own; the refund rule does not.
+    const receipt = signApproval({
+      toolCallId: "call_1",
+      scenario: "high-value-operation",
+      amountUsd: 480,
+      issuedAt: Date.now(),
+    });
     const result = await issueRefund({
       orderId: "1",
       amountUsd: 480,
@@ -82,7 +126,13 @@ describe("issueRefund", () => {
   });
 
   it("issues the refund once a valid receipt for that amount is presented", async () => {
-    const receipt = signApproval({ toolCallId: "call_1", amountUsd: 480, issuedAt: Date.now() });
+    const receipt = signApproval({
+      toolCallId: "call_1",
+      scenario: "refund",
+      amountUsd: 480,
+      orderId: "1",
+      issuedAt: Date.now(),
+    });
     const result = await issueRefund({
       orderId: "1",
       amountUsd: 480,

@@ -135,9 +135,15 @@ that reaches the customer's own browser in the message stream. Leaving that endp
 have let the customer whose transfer just escalated approve it themselves from devtools. In a
 deployment, the only thing that can resolve an approval is a signature Slack produced.
 
+**The account data is a fixture, and it is in-memory.** `lib/data/store.ts` stands in for the
+billing and order systems a real deployment would call. Its rows are anchored to "today" rather
+than to fixed dates, so the walkthrough above behaves the same next month — but writes live in
+the process: on the hosted demo, the first visitor to refund order 42 consumes it for whoever
+loads that instance next. The durability claim above is about the workflow run, not about this.
+
 **With more time:** a timeout that escalates to a second reviewer instead of waiting forever,
-real session identity in place of the demo customer constant, and Redis behind the rate limiter
-so it holds across instances.
+real session identity in place of the demo customer constant, a real store behind the fixtures,
+and Redis behind the rate limiter so it holds across instances.
 
 One known upstream blocker: the workflow-level suite (`pnpm test:integration`) currently times
 out inside the Workflow SDK's local dev runtime — details in

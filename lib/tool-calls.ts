@@ -12,7 +12,6 @@ type MessageLike = { id: string; parts?: readonly PartLike[] };
  */
 export function selectToolCallOwners(messages: readonly MessageLike[]): Map<string, string> {
   const owners = new Map<string, string>();
-  const resolved = new Set<string>();
 
   for (const message of messages) {
     for (const part of message.parts ?? []) {
@@ -24,7 +23,6 @@ export function selectToolCallOwners(messages: readonly MessageLike[]): Map<stri
       if (hasOutput) {
         // The resolved version always wins, and a later one supersedes an earlier.
         owners.set(id, message.id);
-        resolved.add(id);
         continue;
       }
 

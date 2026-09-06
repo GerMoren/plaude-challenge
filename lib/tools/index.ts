@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { approvalHook } from "@/lib/hooks/approval-hook";
+import { approvalHook } from "@/lib/workflow/approval-hook";
 import { sendSlackApprovalRequest } from "@/lib/slack/client";
 import {
   DEMO_CUSTOMER_ID,
@@ -92,7 +92,7 @@ async function executeIssueRefund({
     refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
   });
   if (verdict.requiresApproval) {
-    const receipt = verifyApproval(approvalReceipt, { amountUsd });
+    const receipt = verifyApproval(approvalReceipt, { scenario: "refund", amountUsd, orderId });
     if (!receipt.valid) {
       event.outcome = "blocked_pending_approval";
       event.policy_reason = verdict.reason;
@@ -122,7 +122,8 @@ async function executeRequestHumanApproval(
     scenario,
     summary,
     amountUsd,
-  }: { scenario: string; summary: string; amountUsd: number },
+    orderId,
+  }: { scenario: string; summary: string; amountUsd: number; orderId?: string },
   { toolCallId }: { toolCallId: string },
 ) {
   // Escalating something the policy already clears is not caution, it is noise
@@ -139,10 +140,13 @@ async function executeRequestHumanApproval(
         : { requiresApproval: true as const };
 
   if (!verdict.requiresApproval) {
+    // No receipt here on purpose. This path never asked a human, and issueRefund
+    // runs the same policy check itself — so anything that genuinely needs a
+    // signature still gets refused. Minting one anyway would hand the model a
+    // valid signature it could spend on a request that does need approval.
     return {
       approved: true as const,
       comment: "Cleared automatically by policy; no human was involved.",
-      approvalReceipt: await mintApprovalReceipt({ toolCallId, amountUsd }),
     };
   }
 
@@ -159,21 +163,25 @@ async function executeRequestHumanApproval(
   return {
     approved: true as const,
     comment,
-    approvalReceipt: await mintApprovalReceipt({ toolCallId, amountUsd }),
+    approvalReceipt: await mintApprovalReceipt({ toolCallId, scenario, amountUsd, orderId }),
   };
 }
 
 async function mintApprovalReceipt({
   toolCallId,
+  scenario,
   amountUsd,
+  orderId,
 }: {
   toolCallId: string;
+  scenario: string;
   amountUsd: number;
+  orderId?: string;
 }) {
   "use step";
 
   // Signing needs Node crypto, which only exists inside a step.
-  return signApproval({ toolCallId, amountUsd, issuedAt: Date.now() });
+  return signApproval({ toolCallId, scenario, amountUsd, orderId, issuedAt: Date.now() });
 }
 
 export const agentTools = {
@@ -223,6 +231,12 @@ export const agentTools = {
         .number()
         .describe(
           "The amount in dollars this request is about. The policy thresholds are checked against it before anyone is paged, and the approval is bound to it.",
+        ),
+      orderId: z
+        .string()
+        .optional()
+        .describe(
+          "For a refund, the order it applies to. The approval is bound to it, so a refund escalation without it cannot be completed.",
         ),
     }),
     execute: executeRequestHumanApproval,

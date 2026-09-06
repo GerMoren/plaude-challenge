@@ -1,4 +1,4 @@
-import { approvalHook } from "@/lib/hooks/approval-hook";
+import { approvalHook } from "@/lib/workflow/approval-hook";
 import { z } from "zod";
 import { logger, redactToken } from "@/lib/logger";
 

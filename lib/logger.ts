@@ -16,7 +16,7 @@ export const logger = {
   error: (event: Record<string, unknown>) => emit("error", event),
 };
 
-// Approval tokens double as bearer credentials (see lib/hooks/approval-hook.ts) —
+// Approval tokens double as bearer credentials (see lib/workflow/approval-hook.ts) —
 // never write the full value to logs, only enough to correlate related log lines.
 export function redactToken(token: string) {
   return token.length <= 8 ? "***" : `${token.slice(0, 8)}…`;
