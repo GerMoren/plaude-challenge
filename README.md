@@ -79,7 +79,11 @@ its own judgment — only the plain-text policy and a human reviewer can.
   small model to strictly gate a single always-available tool, not a bug in the workflow or
   hook logic — the escalation itself, and the resume once a human answers, work correctly
   every time. A larger model (e.g. `anthropic/claude-sonnet-5`, `openai/gpt-4.1`) follows the
-  negative instruction more reliably, at a higher per-request cost.
+  negative instruction more reliably, at a higher per-request cost. In one observed session
+  it also misreported an *approved* outcome to the user as rejected, contradicting its own
+  tool result — `lib/instructions/index.ts` now explicitly instructs the model to treat the
+  tool's returned string as ground truth rather than reasoning about the outcome itself, but
+  this class of error is inherent to a small model and not fully eliminable by prompting.
 - The human-in-the-loop step depends on a human actually being reachable on Slack. There's no
   timeout/escalation-to-a-second-reviewer path — the workflow will wait indefinitely (which
   Workflow DevKit supports natively, at zero cost while paused).

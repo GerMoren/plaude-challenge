@@ -13,7 +13,7 @@ function ApprovalCard({ output }: { output?: string }) {
       <Alert className="border-amber-300/60 bg-amber-500/10 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
         <Clock className="h-4 w-4" />
         <AlertTitle>Human approval requested</AlertTitle>
-        <AlertDescription>Waiting on a human reviewer on Slack.</AlertDescription>
+        <AlertDescription>Waiting on a human reviewer to respond.</AlertDescription>
       </Alert>
     );
   }
