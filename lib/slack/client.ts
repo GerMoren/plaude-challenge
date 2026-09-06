@@ -1,10 +1,12 @@
 import { logger, redactToken } from "@/lib/logger";
+import { APPROVAL_REASON_BLOCK_ID, APPROVAL_REASON_ACTION_ID } from "./approval-decision";
 
 export const APPROVE_ACTION_ID = "approval_approve";
 export const REJECT_ACTION_ID = "approval_reject";
 export const APPROVAL_MODAL_CALLBACK_ID = "approval_decision";
-export const APPROVAL_REASON_BLOCK_ID = "approval_reason_block";
-export const APPROVAL_REASON_ACTION_ID = "approval_reason_input";
+// Declared once, in the module that reads them back, so the writer and the
+// reader of this field cannot drift apart silently.
+export { APPROVAL_REASON_BLOCK_ID, APPROVAL_REASON_ACTION_ID } from "./approval-decision";
 
 function approvalBlocks({
   token,

@@ -45,6 +45,11 @@ const REFUNDS: Refund[] = [
   { orderId: "9002", customerId: "cus_001", amountUsd: 60, issuedAt: "2026-07-04" },
 ];
 
+const SEEDED_REFUND_COUNT = REFUNDS.length;
+const SEEDED_ORDER_STATUS: Record<string, Order["status"]> = Object.fromEntries(
+  ORDERS.map((o) => [o.id, o.status]),
+);
+
 // The demo UI has no login, so every conversation acts as this customer.
 export const DEMO_CUSTOMER_ID = "cus_001";
 
@@ -65,6 +70,12 @@ export function countRecentRefunds(customerId: string, withinDays: number, now =
   return REFUNDS.filter(
     (r) => r.customerId === customerId && new Date(r.issuedAt).getTime() >= cutoff,
   ).length;
+}
+
+/** Test-only: restores the seeded fixtures between cases. */
+export function __resetStore() {
+  REFUNDS.length = SEEDED_REFUND_COUNT;
+  for (const order of ORDERS) order.status = SEEDED_ORDER_STATUS[order.id];
 }
 
 export function recordRefund(refund: Refund) {

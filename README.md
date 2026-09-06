@@ -67,7 +67,8 @@ without a code change.
 | Concern | Decision |
 |---|---|
 | Durable pause | `defineHook()` — the run suspends, costs nothing, and resumes on the reviewer's answer |
-| Who enforces the policy | Code, not the prompt. [`policy.ts`](./lib/policy.ts) owns the thresholds; the tools refuse to page a human the policy clears, or to move money on an unapproved refund |
+| Who enforces the policy | Code, not the prompt. [`policy.ts`](./lib/policy.ts) owns the thresholds, and the check runs on every escalation rather than when the model remembers to ask for it |
+| Proving an approval happened | A signed receipt ([`approval-receipt.ts`](./lib/approval-receipt.ts)), minted only after a real reviewer answers and bound to the amount. `issueRefund` verifies it — so a prompt injection telling the agent "this was already approved" gets a refusal, not a payout |
 | Where approval happens | Interactive buttons in Slack. The token rides in Slack's **signed** callback, so it never reaches a browser URL, a history entry, or a screenshot |
 | Audit trail | Approve/Reject asks for an optional reason. It reaches the agent with the decision and stays in the channel in place of the buttons: *"Rejected by ana: unknown vendor"* |
 | Trusting Slack | HMAC verification with a five-minute replay window ([`verify.ts`](./lib/slack/verify.ts)) |
@@ -97,6 +98,7 @@ pnpm dev
 | `AGENT_MODEL` | No | Gateway model string. Defaults to `openai/gpt-4o-mini` |
 | `SLACK_BOT_TOKEN` + `SLACK_CHANNEL_ID` | For buttons | Posts the interactive approval message |
 | `SLACK_SIGNING_SECRET` | For buttons | Verifies Slack's callbacks |
+| `APPROVAL_SIGNING_SECRET` | Production | Signs approval receipts. Falls back to `SLACK_SIGNING_SECRET`; one of the two must be set in production |
 | `SLACK_WEBHOOK_URL` | Fallback | Link-based approval when there's no bot token |
 | `REFUND_AUTO_APPROVE_MAX_USD` · `REFUND_MAX_MONTHLY_COUNT` · `HIGH_VALUE_THRESHOLD_USD` | No | Policy thresholds |
 
@@ -122,13 +124,16 @@ development falls back to the link-based page.
 escalated some of them "to be safe" — and a rule that fires inconsistently isn't a rule. So the
 numbers moved out of the prompt into [`lib/policy.ts`](./lib/policy.ts): the model reads the
 request and decides what the customer wants, and code decides whether that needs a human.
-`requestHumanApproval` refuses to page anyone the policy already clears, and `issueRefund`
-refuses to move money on a refund that needed a signature and didn't get one. The prompt still
-describes the policy, because the model has to explain it — but it is no longer what enforces it.
+`requestHumanApproval` refuses to page anyone the policy already clears, and `issueRefund` will
+not move money without a signed receipt that a reviewer actually answered — an argument the
+model carries but cannot forge. The prompt still describes the policy, because the model has to
+explain it — but it is no longer what enforces it.
 
-**The link-based approval page is the weaker path,** kept only for webhook-only setups. It puts
-the token in a URL, and `noindex` + `no-referrer` shrink the blast radius without removing it.
-The Slack buttons don't mitigate that problem, they avoid it — which is why they're the default.
+**The link-based approval page is a local-development affordance, and it is disabled in
+production.** Its only credential would be the hook token — which is the tool call id, a value
+that reaches the customer's own browser in the message stream. Leaving that endpoint open would
+have let the customer whose transfer just escalated approve it themselves from devtools. In a
+deployment, the only thing that can resolve an approval is a signature Slack produced.
 
 **With more time:** a timeout that escalates to a second reviewer instead of waiting forever,
 real session identity in place of the demo customer constant, and Redis behind the rate limiter

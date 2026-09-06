@@ -8,9 +8,29 @@ const bodySchema = z.object({
   comment: z.string().optional(),
 });
 
+/**
+ * Local-development escape hatch, and nothing more.
+ *
+ * Its only credential is the hook token, which is the tool call id — a value
+ * that reaches the customer's own browser in the message stream. Left enabled
+ * in production, the customer whose $5,000 transfer just escalated could read
+ * that id out of devtools and approve their own request, which is the exact
+ * control this whole app exists to enforce. In production the only way to
+ * resolve an approval is a signature Slack produced.
+ */
 export async function POST(request: Request) {
   const startedAt = Date.now();
   const event: Record<string, unknown> = { route: "POST /api/hooks/approval" };
+
+  if (process.env.NODE_ENV === "production") {
+    event.outcome = "disabled_in_production";
+    event.duration_ms = Date.now() - startedAt;
+    logger.error(event);
+    return Response.json(
+      { success: false, error: "Approvals are resolved through Slack." },
+      { status: 404 },
+    );
+  }
 
   let body: unknown;
   try {

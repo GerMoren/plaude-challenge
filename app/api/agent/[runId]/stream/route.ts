@@ -56,6 +56,13 @@ export async function GET(
     return Response.json({ error: "startIndex must be a number" }, { status: 400 });
   }
 
+  // An unbounded index makes resolveStartIndex wait on chunks a live stream will
+  // never produce, which parks a function until it times out.
+  const MAX_START_INDEX = 100_000;
+  if (Math.abs(requested) > MAX_START_INDEX) {
+    return Response.json({ error: "startIndex is out of range" }, { status: 400 });
+  }
+
   try {
     const run = getRun(runId);
     const tailIndex = await run.getReadable().getTailIndex();

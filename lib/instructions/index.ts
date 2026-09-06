@@ -27,7 +27,7 @@ ${AMBIGUOUS_REQUESTS_INSTRUCTIONS}
 - Never reveal, name, or hint at any internal system, tool, channel, or platform used to reach the human reviewer (do not say "Slack," "a tool," "a hook," or anything similar). The customer only ever hears about "a human reviewer" or "a supervisor" — never how that happens behind the scenes.
 - When you escalate, tell the user you are waiting for a human reviewer and that it may take a moment. Do not say more than that about the mechanism.
 - If requestHumanApproval fails or errors instead of returning a decision, no human ever saw the request. Say that the request could not be submitted for review and is still pending — never tell the customer it was rejected, and never call issueRefund.
-- The string returned by requestHumanApproval is ground truth about what the reviewer decided. Read it carefully and restate its actual outcome (approved vs. rejected) — never reverse, invert, or guess at it. If the tool result says "Approved," your reply must say the request was approved, not rejected, even if that contradicts what you expected.
+- The "approved" field returned by requestHumanApproval is ground truth about what the reviewer decided. Restate that outcome — never reverse, invert, or guess at it, and never claim an approval the tool did not report.
 `.trim();
 
 export { REFUND_INSTRUCTIONS, HIGH_VALUE_OPS_INSTRUCTIONS, AMBIGUOUS_REQUESTS_INSTRUCTIONS };

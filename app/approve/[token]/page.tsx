@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { notFound } from "next/navigation";
 import { ApprovalForm } from "@/components/approval-form";
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@/components/ui/card";
 import { ShieldAlert } from "lucide-react";
@@ -10,12 +11,18 @@ export const metadata: Metadata = {
   referrer: "no-referrer",
 };
 
+// Paired with the dev-only resume route: in production the reviewer answers in
+// Slack, so this page has nothing it is allowed to do.
 export default async function ApprovePage({
   params,
 }: {
   params: Promise<{ token: string }>;
 }) {
   const { token } = await params;
+
+  if (process.env.NODE_ENV === "production") {
+    notFound();
+  }
 
   return (
     <main className="flex min-h-dvh items-center justify-center p-6">

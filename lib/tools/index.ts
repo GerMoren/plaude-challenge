@@ -11,6 +11,7 @@ import {
 } from "@/lib/data/store";
 import { logger } from "@/lib/logger";
 import { refundRequiresApproval, highValueRequiresApproval } from "@/lib/policy";
+import { signApproval, verifyApproval } from "@/lib/approval-receipt";
 
 const REFUND_HISTORY_WINDOW_DAYS = 30;
 
@@ -48,12 +49,12 @@ async function executeIssueRefund({
   orderId,
   amountUsd,
   reason,
-  approvedByHuman,
+  approvalReceipt,
 }: {
   orderId: string;
   amountUsd: number;
   reason: string;
-  approvedByHuman?: boolean;
+  approvalReceipt?: string;
 }) {
   "use step";
 
@@ -61,7 +62,7 @@ async function executeIssueRefund({
     route: "issueRefund",
     order_id: orderId,
     amount_usd: amountUsd,
-    approved_by_human: Boolean(approvedByHuman),
+    has_receipt: Boolean(approvalReceipt),
   };
 
   const order = getOrder(orderId);
@@ -90,14 +91,18 @@ async function executeIssueRefund({
     amountUsd,
     refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
   });
-  if (verdict.requiresApproval && !approvedByHuman) {
-    event.outcome = "blocked_pending_approval";
-    event.policy_reason = verdict.reason;
-    logger.error(event);
-    return {
-      issued: false as const,
-      reason: `${verdict.reason} Call requestHumanApproval first, then retry with approvedByHuman: true.`,
-    };
+  if (verdict.requiresApproval) {
+    const receipt = verifyApproval(approvalReceipt, { amountUsd });
+    if (!receipt.valid) {
+      event.outcome = "blocked_pending_approval";
+      event.policy_reason = verdict.reason;
+      event.receipt_rejected_because = receipt.reason;
+      logger.error(event);
+      return {
+        issued: false as const,
+        reason: `${verdict.reason} ${receipt.reason} Call requestHumanApproval and pass the approvalReceipt it returns.`,
+      };
+    }
   }
 
   recordRefund({
@@ -117,25 +122,28 @@ async function executeRequestHumanApproval(
     scenario,
     summary,
     amountUsd,
-  }: { scenario: string; summary: string; amountUsd?: number },
+  }: { scenario: string; summary: string; amountUsd: number },
   { toolCallId }: { toolCallId: string },
 ) {
   // Escalating something the policy already clears is not caution, it is noise
-  // that teaches reviewers to rubber-stamp. Check before paging anyone.
-  if (typeof amountUsd === "number") {
-    const verdict =
-      scenario === "refund"
-        ? refundRequiresApproval({
-            amountUsd,
-            refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
-          })
-        : scenario === "high-value-operation"
-          ? highValueRequiresApproval({ amountUsd })
-          : { requiresApproval: true as const };
+  // that teaches reviewers to rubber-stamp. Check before paging anyone — and
+  // check unconditionally, so the model can't skip the gate by omitting a field.
+  const verdict =
+    scenario === "refund"
+      ? refundRequiresApproval({
+          amountUsd,
+          refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
+        })
+      : scenario === "high-value-operation"
+        ? highValueRequiresApproval({ amountUsd })
+        : { requiresApproval: true as const };
 
-    if (!verdict.requiresApproval) {
-      return "No approval needed: policy clears this automatically. Proceed without a human reviewer.";
-    }
+  if (!verdict.requiresApproval) {
+    return {
+      approved: true as const,
+      comment: "Cleared automatically by policy; no human was involved.",
+      approvalReceipt: await mintApprovalReceipt({ toolCallId, amountUsd }),
+    };
   }
 
   // No "use step" here - hooks are workflow-level primitives.
@@ -145,9 +153,27 @@ async function executeRequestHumanApproval(
   const { approved, comment } = await hook;
 
   if (!approved) {
-    return `Rejected by human reviewer${comment ? `: ${comment}` : "."}`;
+    return { approved: false as const, comment };
   }
-  return `Approved by human reviewer${comment ? ` - note: ${comment}` : "."}`;
+
+  return {
+    approved: true as const,
+    comment,
+    approvalReceipt: await mintApprovalReceipt({ toolCallId, amountUsd }),
+  };
+}
+
+async function mintApprovalReceipt({
+  toolCallId,
+  amountUsd,
+}: {
+  toolCallId: string;
+  amountUsd: number;
+}) {
+  "use step";
+
+  // Signing needs Node crypto, which only exists inside a step.
+  return signApproval({ toolCallId, amountUsd, issuedAt: Date.now() });
 }
 
 export const agentTools = {
@@ -172,10 +198,12 @@ export const agentTools = {
       orderId: z.string(),
       amountUsd: z.number().positive(),
       reason: z.string().describe("The reason the customer gave for the refund"),
-      approvedByHuman: z
-        .boolean()
+      approvalReceipt: z
+        .string()
         .optional()
-        .describe("Set to true only after requestHumanApproval returned an approval for this refund"),
+        .describe(
+          "The approvalReceipt string returned by requestHumanApproval. Required for any refund the policy does not clear on its own; it cannot be invented.",
+        ),
     }),
     execute: executeIssueRefund,
   },
@@ -193,9 +221,8 @@ export const agentTools = {
         ),
       amountUsd: z
         .number()
-        .optional()
         .describe(
-          "The amount in dollars this request is about. Always pass it for refunds and high-value operations — the policy thresholds are checked against it before anyone is paged.",
+          "The amount in dollars this request is about. The policy thresholds are checked against it before anyone is paged, and the approval is bound to it.",
         ),
     }),
     execute: executeRequestHumanApproval,

@@ -3,12 +3,12 @@ import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
 import { UserRound, Bot, Clock, ShieldCheck, ShieldX, AlertTriangle } from "lucide-react";
-import { classifyApprovalOutcome } from "@/lib/approval-outcome";
+import { classifyApprovalOutcome, approvalComment } from "@/lib/approval-outcome";
 import type { UIMessage } from "ai";
 
-type ToolPart = { type: string; toolCallId?: string; output?: string; state?: string };
+type ToolPart = { type: string; toolCallId?: string; output?: unknown; state?: string };
 
-function ApprovalCard({ output, errored }: { output?: string; errored?: boolean }) {
+function ApprovalCard({ output, errored }: { output?: unknown; errored?: boolean }) {
   const decision = classifyApprovalOutcome(output, errored);
 
   if (decision === "pending") {
@@ -47,7 +47,7 @@ function ApprovalCard({ output, errored }: { output?: string; errored?: boolean 
     >
       {approved ? <ShieldCheck className="h-4 w-4" /> : <ShieldX className="h-4 w-4" />}
       <AlertTitle>{approved ? "Approved by reviewer" : "Rejected by reviewer"}</AlertTitle>
-      <AlertDescription>{output}</AlertDescription>
+      {approvalComment(output) && <AlertDescription>{approvalComment(output)}</AlertDescription>}
     </Alert>
   );
 }
