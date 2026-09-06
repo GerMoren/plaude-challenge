@@ -75,6 +75,8 @@ without a code change.
 |---|---|
 | Durable pause | `defineHook()` — the run suspends, costs nothing, and resumes on the reviewer's answer |
 | Where approval happens | Interactive buttons in Slack. The token rides in Slack's **signed** callback, so it never reaches a browser URL, a history entry, or a screenshot |
+| Why a decision was made | Approve/Reject opens a modal for an optional reason. It's attached to the decision the agent receives and left in the channel as the audit trail: *"Rejected by ana: unknown vendor"* |
+| Slack's 3-second budget | Resuming a workflow can outlast it, so the click is acknowledged immediately and the message is settled afterwards from `after()` — the buttons never linger on a decided request |
 | Trusting Slack | HMAC verification with a five-minute replay window ([`verify.ts`](./lib/slack/verify.ts)) |
 | Trusting the client | The browser resends the whole conversation each turn, so [`messages.ts`](./lib/messages.ts) keeps only user/assistant text — a forged `"Approved by human reviewer"` can't be replayed into context |
 | Open endpoints | Rate limiting on `/api/agent` so nobody drains the model budget |

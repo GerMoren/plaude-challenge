@@ -2,6 +2,9 @@ import { logger, redactToken } from "@/lib/logger";
 
 export const APPROVE_ACTION_ID = "approval_approve";
 export const REJECT_ACTION_ID = "approval_reject";
+export const APPROVAL_MODAL_CALLBACK_ID = "approval_decision";
+export const APPROVAL_REASON_BLOCK_ID = "approval_reason_block";
+export const APPROVAL_REASON_ACTION_ID = "approval_reason_input";
 
 function approvalBlocks({
   token,
@@ -40,6 +43,85 @@ function approvalBlocks({
       ],
     },
   ];
+}
+
+export type ApprovalModalMetadata = {
+  token: string;
+  approved: boolean;
+  responseUrl?: string;
+};
+
+/**
+ * Opens the "why?" modal in response to an Approve/Reject click. The decision
+ * and the original message's response_url ride in private_metadata so the
+ * eventual view_submission (a separate, later request) can resume the hook and
+ * settle the message — Slack does not carry response_url on that payload itself.
+ */
+export async function openApprovalModal({
+  triggerId,
+  metadata,
+}: {
+  triggerId: string;
+  metadata: ApprovalModalMetadata;
+}) {
+  const botToken = process.env.SLACK_BOT_TOKEN;
+  if (!botToken) throw new Error("SLACK_BOT_TOKEN is not configured");
+
+  const actionLabel = metadata.approved ? "Approve" : "Reject";
+
+  const response = await fetch("https://slack.com/api/views.open", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json; charset=utf-8",
+      Authorization: `Bearer ${botToken}`,
+    },
+    body: JSON.stringify({
+      trigger_id: triggerId,
+      view: {
+        type: "modal",
+        callback_id: APPROVAL_MODAL_CALLBACK_ID,
+        private_metadata: JSON.stringify(metadata),
+        title: { type: "plain_text", text: `${actionLabel} request` },
+        submit: { type: "plain_text", text: actionLabel },
+        close: { type: "plain_text", text: "Cancel" },
+        blocks: [
+          {
+            type: "input",
+            block_id: APPROVAL_REASON_BLOCK_ID,
+            optional: true,
+            label: { type: "plain_text", text: "Reason (optional)" },
+            element: {
+              type: "plain_text_input",
+              action_id: APPROVAL_REASON_ACTION_ID,
+              multiline: true,
+            },
+          },
+        ],
+      },
+    }),
+  });
+
+  const body = (await response.json().catch(() => null)) as { ok?: boolean; error?: string } | null;
+  if (!response.ok || !body?.ok) {
+    throw new Error(`Slack views.open failed: ${body?.error ?? response.status}`);
+  }
+}
+
+/**
+ * Settles an already-posted approval message with the final decision text.
+ * Used from a background task (`after()`), so there is no 3-second deadline —
+ * unlike the synchronous ack Slack expects for the initial interaction.
+ */
+export async function replaceSlackMessage(responseUrl: string | undefined, text: string) {
+  if (!responseUrl) return;
+  const response = await fetch(responseUrl, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ replace_original: true, text }),
+  });
+  if (!response.ok) {
+    throw new Error(`Slack response_url update failed with status ${response.status}`);
+  }
 }
 
 export async function sendSlackApprovalRequest({
