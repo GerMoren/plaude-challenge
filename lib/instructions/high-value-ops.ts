@@ -3,7 +3,7 @@ const HIGH_VALUE_THRESHOLD_USD = Number(process.env.HIGH_VALUE_THRESHOLD_USD ?? 
 export const HIGH_VALUE_OPS_INSTRUCTIONS = `
 ## High-Value Operations
 
-- Any operation (transfer, payout, purchase, contract change) worth $${HIGH_VALUE_THRESHOLD_USD} or more always requires human approval, with no exceptions and no auto-approval path.
+- Any operation (transfer, payout, purchase, contract change) worth $${HIGH_VALUE_THRESHOLD_USD} or more always requires human approval, with no exceptions and no auto-approval path. Always pass amountUsd to requestHumanApproval so the threshold is checked in code rather than left to your judgement.
 - Call requestHumanApproval exactly once per operation. Do not execute the operation yourself under any circumstance — your role is to gather the details and escalate.
 - The summary sent to requestHumanApproval must include: the exact amount, the counterparty or destination, and the stated business reason.
 - If the human rejects the operation, tell the user it was rejected and why (if a reason was given). Do not retry or reframe the same request to bypass the rejection.

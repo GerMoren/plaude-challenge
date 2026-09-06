@@ -76,6 +76,7 @@ without a code change.
 | Concern | Decision |
 |---|---|
 | Durable pause | `defineHook()` — the run suspends, costs nothing, and resumes on the reviewer's answer |
+| Who enforces the policy | Code, not the prompt. [`policy.ts`](./lib/policy.ts) owns the thresholds; the tools refuse to page a human the policy clears, or to move money on an unapproved refund |
 | Where approval happens | Interactive buttons in Slack. The token rides in Slack's **signed** callback, so it never reaches a browser URL, a history entry, or a screenshot |
 | Audit trail | Approve/Reject asks for an optional reason. It reaches the agent with the decision and stays in the channel in place of the buttons: *"Rejected by ana: unknown vendor"* |
 | Trusting Slack | HMAC verification with a five-minute replay window ([`verify.ts`](./lib/slack/verify.ts)) |
@@ -126,12 +127,13 @@ development falls back to the link-based page.
 
 ## Trade-offs, and what I'd do next
 
-**The policy lives in the prompt, and prompts are probabilistic.** A small model
-(`gpt-4o-mini`, chosen to fit the Gateway free tier) occasionally escalates something the policy
-would have auto-approved. The escalation and resume machinery is deterministic and correct every
-time; the judgment about *when* to reach for it is not. A larger model follows it more closely.
-The durable fix isn't a better prompt — it's moving the numeric gates into code and leaving the
-model to handle language, which is the natural next commit.
+**A model is a bad threshold.** Told to auto-approve refunds under $100, `gpt-4o-mini` still
+escalated some of them "to be safe" — and a rule that fires inconsistently isn't a rule. So the
+numbers moved out of the prompt into [`lib/policy.ts`](./lib/policy.ts): the model reads the
+request and decides what the customer wants, and code decides whether that needs a human.
+`requestHumanApproval` refuses to page anyone the policy already clears, and `issueRefund`
+refuses to move money on a refund that needed a signature and didn't get one. The prompt still
+describes the policy, because the model has to explain it — but it is no longer what enforces it.
 
 **The link-based approval page is the weaker path,** kept only for webhook-only setups. It puts
 the token in a URL, and `noindex` + `no-referrer` shrink the blast radius without removing it.

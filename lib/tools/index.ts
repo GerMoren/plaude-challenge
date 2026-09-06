@@ -10,6 +10,7 @@ import {
   recordRefund,
 } from "@/lib/data/store";
 import { logger } from "@/lib/logger";
+import { refundRequiresApproval, highValueRequiresApproval } from "@/lib/policy";
 
 const REFUND_HISTORY_WINDOW_DAYS = 30;
 
@@ -47,10 +48,12 @@ async function executeIssueRefund({
   orderId,
   amountUsd,
   reason,
+  approvedByHuman,
 }: {
   orderId: string;
   amountUsd: number;
   reason: string;
+  approvedByHuman?: boolean;
 }) {
   "use step";
 
@@ -58,6 +61,7 @@ async function executeIssueRefund({
     route: "issueRefund",
     order_id: orderId,
     amount_usd: amountUsd,
+    approved_by_human: Boolean(approvedByHuman),
   };
 
   const order = getOrder(orderId);
@@ -80,6 +84,22 @@ async function executeIssueRefund({
     };
   }
 
+  // The last line of defence: even if the model skipped the escalation, money
+  // does not move on a refund the policy says a human has to sign off on.
+  const verdict = refundRequiresApproval({
+    amountUsd,
+    refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
+  });
+  if (verdict.requiresApproval && !approvedByHuman) {
+    event.outcome = "blocked_pending_approval";
+    event.policy_reason = verdict.reason;
+    logger.error(event);
+    return {
+      issued: false as const,
+      reason: `${verdict.reason} Call requestHumanApproval first, then retry with approvedByHuman: true.`,
+    };
+  }
+
   recordRefund({
     orderId,
     customerId: DEMO_CUSTOMER_ID,
@@ -93,9 +113,31 @@ async function executeIssueRefund({
 }
 
 async function executeRequestHumanApproval(
-  { scenario, summary }: { scenario: string; summary: string },
+  {
+    scenario,
+    summary,
+    amountUsd,
+  }: { scenario: string; summary: string; amountUsd?: number },
   { toolCallId }: { toolCallId: string },
 ) {
+  // Escalating something the policy already clears is not caution, it is noise
+  // that teaches reviewers to rubber-stamp. Check before paging anyone.
+  if (typeof amountUsd === "number") {
+    const verdict =
+      scenario === "refund"
+        ? refundRequiresApproval({
+            amountUsd,
+            refundsInWindow: countRecentRefunds(DEMO_CUSTOMER_ID, REFUND_HISTORY_WINDOW_DAYS),
+          })
+        : scenario === "high-value-operation"
+          ? highValueRequiresApproval({ amountUsd })
+          : { requiresApproval: true as const };
+
+    if (!verdict.requiresApproval) {
+      return "No approval needed: policy clears this automatically. Proceed without a human reviewer.";
+    }
+  }
+
   // No "use step" here - hooks are workflow-level primitives.
   await sendSlackApprovalRequest({ token: toolCallId, scenario, summary });
 
@@ -130,6 +172,10 @@ export const agentTools = {
       orderId: z.string(),
       amountUsd: z.number().positive(),
       reason: z.string().describe("The reason the customer gave for the refund"),
+      approvedByHuman: z
+        .boolean()
+        .optional()
+        .describe("Set to true only after requestHumanApproval returned an approval for this refund"),
     }),
     execute: executeIssueRefund,
   },
@@ -144,6 +190,12 @@ export const agentTools = {
         .string()
         .describe(
           "Everything the human reviewer needs to decide: amounts, reasons, looked-up account facts, the specific question.",
+        ),
+      amountUsd: z
+        .number()
+        .optional()
+        .describe(
+          "The amount in dollars this request is about. Always pass it for refunds and high-value operations — the policy thresholds are checked against it before anyone is paged.",
         ),
     }),
     execute: executeRequestHumanApproval,
