@@ -8,7 +8,31 @@ type SlackPayload = {
   type?: string;
   user?: { id?: string; username?: string };
   actions?: SlackAction[];
+  response_url?: string;
 };
+
+/**
+ * Slack only applies an inline `replace_original` if we answer within ~3s, and
+ * resuming the workflow can outlast that — leaving the buttons live and
+ * clickable on an approval that's already decided. Posting the same replacement
+ * to `response_url` has no such deadline, so the message always settles.
+ */
+async function replaceSlackMessage(responseUrl: string | undefined, text: string) {
+  if (!responseUrl) return;
+  try {
+    await fetch(responseUrl, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ replace_original: true, text }),
+    });
+  } catch (error) {
+    logger.error({
+      route: "POST /api/slack/interactivity",
+      outcome: "response_url_update_failed",
+      error: error instanceof Error ? error.message : String(error),
+    });
+  }
+}
 
 export async function POST(request: Request) {
   const startedAt = Date.now();
@@ -78,11 +102,10 @@ export async function POST(request: Request) {
     event.error = error instanceof Error ? error.message : String(error);
     event.duration_ms = Date.now() - startedAt;
     logger.error(event);
-    // Replace the message so the reviewer sees the failure instead of a silent no-op.
-    return Response.json({
-      replace_original: true,
-      text: `:warning: Could not record that decision — the request may have already been resolved.`,
-    });
+    const failureText =
+      ":warning: Could not record that decision — the request may have already been resolved.";
+    await replaceSlackMessage(payload.response_url, failureText);
+    return Response.json({ replace_original: true, text: failureText });
   }
 
   event.outcome = "resumed";
@@ -90,8 +113,7 @@ export async function POST(request: Request) {
   logger.info(event);
 
   // Swapping the buttons out prevents a second click on a resolved approval.
-  return Response.json({
-    replace_original: true,
-    text: `${decision} by ${reviewer}.`,
-  });
+  const resultText = `${decision} by ${reviewer}.`;
+  await replaceSlackMessage(payload.response_url, resultText);
+  return Response.json({ replace_original: true, text: resultText });
 }
