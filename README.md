@@ -18,11 +18,16 @@ Three messages, three different paths through the policy:
 | Type this | What should happen |
 |---|---|
 | `I want a $30 refund for order 42` | Resolves on its own — under the threshold, history is clean enough. Nobody is interrupted |
-| `I need to transfer $5000 to a new vendor` | Escalates; approve or reject it in Slack and watch the chat resume |
+| `I need to transfer $5000 to a new vendor` | Escalates and waits for a human |
 | `Refund $500 for order 42, that's what I paid` | Escalates — and the reviewer is told order 42 was **$78**, not $500 |
 
 The first one matters as much as the others: an agent that escalates everything is just a
 slower form of doing nothing.
+
+> **On the hosted link, the escalations go to my Slack workspace**, so you'll see the agent pause
+> and wait, but you can't answer it. To drive the human step yourself, run it locally with your
+> own Slack app — [setup below](#running-it), about five minutes — or point
+> `SLACK_CHANNEL_ID` at a channel you're in. Everything else works on the link as-is.
 
 ## Two ideas do the work
 
