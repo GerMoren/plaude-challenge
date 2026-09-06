@@ -6,10 +6,25 @@
     "oxc"
   ],
   "categories": {
-    "correctness": "error"
+    "correctness": "error",
+    "suspicious": "error",
+    "perf": "error"
   },
-  "rules": {},
+  "rules": {
+    "no-underscore-dangle": [
+      "error",
+      {
+        "allow": [
+          "__resetStore",
+          "__resetRateLimits"
+        ]
+      }
+    ]
+  },
   "env": {
     "builtin": true
-  }
+  },
+  "ignorePatterns": [
+    "components/ui/**"
+  ]
 }

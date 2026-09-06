@@ -84,7 +84,7 @@ oxlint, Vitest.
 
 ```bash
 pnpm install
-cp env.sample.txt .env.local   # fill in AI_GATEWAY_API_KEY
+cp .env.example .env.local   # fill in AI_GATEWAY_API_KEY
 pnpm dev
 ```
 
