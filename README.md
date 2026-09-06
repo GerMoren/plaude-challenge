@@ -55,10 +55,12 @@ respond, the paused run and its state are unaffected.
 Defined as plain text in [`lib/instructions/`](./lib/instructions), combined into the
 agent's system prompt in [`lib/instructions/index.ts`](./lib/instructions/index.ts):
 
-- **[Refunds](./lib/instructions/refunds.ts)** — auto-approve under $100 with a clean
-  refund history; escalate to a human at $100+ or after 2+ refunds in 30 days.
+- **[Refunds](./lib/instructions/refunds.ts)** — auto-approve under `REFUND_AUTO_APPROVE_MAX_USD`
+  (default $100) with a clean refund history; escalate to a human at that threshold or above,
+  or after `REFUND_MAX_MONTHLY_COUNT` (default 2) refunds in 30 days.
 - **[High-value operations](./lib/instructions/high-value-ops.ts)** — any operation worth
-  $1,000+ always requires human approval, with no auto-approval path.
+  `HIGH_VALUE_THRESHOLD_USD` (default $1,000) or more always requires human approval, with
+  no auto-approval path.
 - **[Ambiguous requests](./lib/instructions/ambiguous-requests.ts)** — if required
   information is missing or contradictory, the agent asks the user first, and escalates to
   a human only if the user can't resolve it.
@@ -129,6 +131,9 @@ to `.env.local`):
 | `AGENT_MODEL` | No | AI Gateway model string passed to `DurableAgent`. Defaults to `"openai/gpt-4o-mini"` (works on the Gateway free tier). Swap to `"anthropic/claude-sonnet-5"` or similar for stricter tool-use policy adherence — see [Known limitations](#known-limitations). |
 | `SLACK_WEBHOOK_URL` | No | A Slack [Incoming Webhook](https://api.slack.com/messaging/webhooks) URL. If unset, the approval link is logged to the server console instead — useful for local testing without a Slack workspace. |
 | `APP_URL` | No | Public base URL used to build the `/approve/[token]` link sent to Slack. Defaults to `http://localhost:3000`. |
+| `REFUND_AUTO_APPROVE_MAX_USD` | No | Refund auto-approval ceiling. Defaults to `100`. |
+| `REFUND_MAX_MONTHLY_COUNT` | No | Refund count in 30 days that forces escalation regardless of amount. Defaults to `2`. |
+| `HIGH_VALUE_THRESHOLD_USD` | No | Amount at/above which any operation requires human approval. Defaults to `1000`. |
 
 Try it: ask for something small ("$50 refund, no prior refunds") and it resolves instantly.
 Ask for something bigger ("$5,000 wire transfer to a new vendor") and the agent will tell
