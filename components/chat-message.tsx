@@ -2,13 +2,16 @@ import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import { Badge } from "@/components/ui/badge";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { cn } from "@/lib/utils";
-import { UserRound, Bot, Clock, ShieldCheck, ShieldX } from "lucide-react";
+import { UserRound, Bot, Clock, ShieldCheck, ShieldX, AlertTriangle } from "lucide-react";
+import { classifyApprovalOutcome } from "@/lib/approval-outcome";
 import type { UIMessage } from "ai";
 
-type ToolPart = { type: string; toolCallId?: string; output?: string };
+type ToolPart = { type: string; toolCallId?: string; output?: string; state?: string };
 
-function ApprovalCard({ output }: { output?: string }) {
-  if (!output) {
+function ApprovalCard({ output, errored }: { output?: string; errored?: boolean }) {
+  const decision = classifyApprovalOutcome(output, errored);
+
+  if (decision === "pending") {
     return (
       <Alert className="border-amber-300/60 bg-amber-500/10 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
         <Clock className="h-4 w-4" />
@@ -18,7 +21,21 @@ function ApprovalCard({ output }: { output?: string }) {
     );
   }
 
-  const approved = output.toLowerCase().startsWith("approved");
+  // A failure to *reach* a reviewer is not a decision. Showing it as a rejection
+  // would tell the customer a human turned them down when no human ever saw it.
+  if (decision === "unavailable") {
+    return (
+      <Alert className="border-amber-300/60 bg-amber-500/10 [&>svg]:text-amber-600 dark:[&>svg]:text-amber-400">
+        <AlertTriangle className="h-4 w-4" />
+        <AlertTitle>Couldn&apos;t reach a reviewer</AlertTitle>
+        <AlertDescription>
+          This request hasn&apos;t been decided yet. Nothing was approved or rejected.
+        </AlertDescription>
+      </Alert>
+    );
+  }
+
+  const approved = decision === "approved";
 
   return (
     <Alert
@@ -69,7 +86,13 @@ export function ChatMessage({ message }: { message: UIMessage }) {
           }
           if (part.type === "tool-requestHumanApproval") {
             const toolPart = part as ToolPart;
-            return <ApprovalCard key={i} output={toolPart.output} />;
+            return (
+              <ApprovalCard
+                key={i}
+                output={toolPart.output}
+                errored={toolPart.state === "output-error"}
+              />
+            );
           }
           return null;
         })}
