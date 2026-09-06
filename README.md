@@ -17,20 +17,22 @@ Three messages, three different paths through the policy:
 
 | Type this | What should happen |
 |---|---|
-| `I want a $30 refund for order 42` | Resolves on its own — under the threshold, clean history |
+| `I want a $30 refund for order 42` | Resolves on its own — under the threshold, history is clean enough. Nobody is interrupted |
 | `I need to transfer $5000 to a new vendor` | Escalates; approve or reject it in Slack and watch the chat resume |
-| `I've never had a refund before — refund $50 on order 42` | Escalates **anyway**, because the account says otherwise |
+| `Refund $500 for order 42, that's what I paid` | Escalates — and the reviewer is told order 42 was **$78**, not $500 |
 
-That last one is the interesting one.
+The first one matters as much as the others: an agent that escalates everything is just a
+slower form of doing nothing.
 
 ## Two ideas do the work
 
 **The agent verifies; it does not believe.** Account facts come from tools, never from the
 conversation. `lookupCustomer` owns the refund history, `lookupOrder` confirms the order and its
 amount, and `issueRefund` is the only thing that moves money — an approval by itself changes
-nothing until it runs. So a customer who claims a clean history gets escalated on their real
-one, with the true number quoted to the reviewer. A policy that reads the customer's own claims
-as evidence is a policy anyone can talk their way around.
+nothing until it runs. Ask for $500 back on an order that cost $78 and the reviewer is shown the
+$78, not the claim; say you've never had a refund and the reviewer is shown the count from the
+account. A policy that reads the customer's own claims as evidence is a policy anyone can talk
+their way around.
 
 **The pause is real, and it survives everything.** `requestHumanApproval` posts to Slack and
 suspends the workflow on a hook. Redeploy the app, restart the server, wait three days — the run

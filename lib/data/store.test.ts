@@ -4,8 +4,10 @@ import { countRecentRefunds, getOrder, listOrders, DEMO_CUSTOMER_ID } from "./st
 describe("account lookups", () => {
   it("counts only refunds inside the window", () => {
     const asOf = new Date("2026-09-06");
-    expect(countRecentRefunds(DEMO_CUSTOMER_ID, 30, asOf)).toBe(2);
+    expect(countRecentRefunds(DEMO_CUSTOMER_ID, 30, asOf)).toBe(1);
     expect(countRecentRefunds(DEMO_CUSTOMER_ID, 5, asOf)).toBe(0);
+    // The older refund only counts once the window is wide enough to reach it.
+    expect(countRecentRefunds(DEMO_CUSTOMER_ID, 120, asOf)).toBe(2);
   });
 
   it("does not count another customer's refunds", () => {

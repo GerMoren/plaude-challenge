@@ -39,7 +39,10 @@ const ORDERS: Order[] = [
 
 const REFUNDS: Refund[] = [
   { orderId: "9001", customerId: "cus_001", amountUsd: 35, issuedAt: "2026-08-20" },
-  { orderId: "9002", customerId: "cus_001", amountUsd: 60, issuedAt: "2026-08-27" },
+  // Deliberately one refund inside the 30-day window and one outside it: the
+  // demo customer stays under the escalation count, so the auto-approval branch
+  // is actually reachable, while the window boundary still gets exercised.
+  { orderId: "9002", customerId: "cus_001", amountUsd: 60, issuedAt: "2026-07-04" },
 ];
 
 // The demo UI has no login, so every conversation acts as this customer.
