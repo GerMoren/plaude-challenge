@@ -1,8 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useChat } from "@ai-sdk/react";
-import { DefaultChatTransport } from "ai";
+import { WorkflowChatTransport } from "@workflow/ai";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { ScrollArea } from "@/components/ui/scroll-area";
@@ -10,10 +10,33 @@ import { Badge } from "@/components/ui/badge";
 import { ChatMessage } from "@/components/chat-message";
 import { SendHorizonal, ShieldHalf } from "lucide-react";
 
+const RUN_ID_KEY = "plaude-active-run-id";
+
 export default function Home() {
   const [input, setInput] = useState("");
+
+  // A run can be paused on a human reviewer for hours. If the tab was closed
+  // while waiting, pick that run's stream back up instead of losing the answer.
+  const activeRunId = useMemo(() => {
+    if (typeof window === "undefined") return undefined;
+    return localStorage.getItem(RUN_ID_KEY) ?? undefined;
+  }, []);
+
   const { messages, sendMessage, status } = useChat({
-    transport: new DefaultChatTransport({ api: "/api/agent" }),
+    resume: Boolean(activeRunId),
+    transport: new WorkflowChatTransport({
+      api: "/api/agent",
+      onChatSendMessage: (response) => {
+        const runId = response.headers.get("x-workflow-run-id");
+        if (runId) localStorage.setItem(RUN_ID_KEY, runId);
+      },
+      onChatEnd: () => localStorage.removeItem(RUN_ID_KEY),
+      prepareReconnectToStreamRequest: ({ api: _api, ...rest }) => {
+        const runId = localStorage.getItem(RUN_ID_KEY);
+        if (!runId) throw new Error("No active workflow run to reconnect to");
+        return { ...rest, api: `/api/agent/${encodeURIComponent(runId)}/stream` };
+      },
+    }),
   });
 
   const isBusy = status === "streaming" || status === "submitted";

@@ -26,9 +26,11 @@ jobs:
 
       - run: pnpm build
 
-      # Known upstream issue in the Workflow SDK's local dev "world" runtime
-      # currently makes these tests time out (ERR_IMPORT_ATTRIBUTE_MISSING in
-      # a bundled builtin-modules import) — see the test file header. Surfaced
-      # here, but does not block the pipeline until upstream fixes it.
       - run: pnpm test
+
+      # The workflow-level suite is blocked by an upstream issue in the Workflow
+      # SDK's local dev "world" runtime (ERR_IMPORT_ATTRIBUTE_MISSING in a
+      # bundled builtin-modules import) — see the test file header. Surfaced
+      # here, but does not block the pipeline until upstream fixes it.
+      - run: pnpm test:integration
         continue-on-error: true

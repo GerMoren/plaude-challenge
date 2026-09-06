@@ -6,10 +6,21 @@ over Slack, built with Next.js and Vercel's [Workflow DevKit](https://workflow-s
 
 Built as the take-home for the Forward Deployed Engineer role at [Plaude](https://plaude.com).
 
-**Live**: https://plaude-challenge-five.vercel.app — the chat UI needs `AI_GATEWAY_API_KEY`
-(and optionally `SLACK_WEBHOOK_URL`) set as Vercel project env vars to fully function; the
+**Live**: https://plaude-challenge-five.vercel.app — the chat UI needs `AI_GATEWAY_API_KEY`, and
+the Slack variables below for the approval step; the
 [interactive flow diagram](https://plaude-challenge-five.vercel.app/hitl-flow.html) works
 regardless.
+
+### Slack setup (for the interactive approval buttons)
+
+1. Create an app at [api.slack.com/apps](https://api.slack.com/apps) → **From scratch**.
+2. **Socket Mode → off.** Socket Mode holds a WebSocket open, which a serverless deployment
+   can't do, and it hides the Request URL field.
+3. **Interactivity & Shortcuts → on**, Request URL: `https://<your-domain>/api/slack/interactivity`.
+4. **OAuth & Permissions** → add the `chat:write` scope → install the app → copy the **Bot User
+   OAuth Token** into `SLACK_BOT_TOKEN`.
+5. **Basic Information** → copy the **Signing Secret** into `SLACK_SIGNING_SECRET`.
+6. Invite the bot to the channel and put that channel's id in `SLACK_CHANNEL_ID`.
 
 ## What it does
 
@@ -26,12 +37,26 @@ is paused for days.
 
 In short: the user's request starts a durable workflow; if the plain-text policy requires
 sign-off, the agent's `requestHumanApproval` tool notifies a human on Slack and suspends the
-workflow on a hook — consuming zero resources while it waits. The human approves or rejects
-via `/approve/[token]`, which resumes the hook, and the agent relays the outcome back to the
+workflow on a hook — consuming zero resources while it waits. The reviewer approves or rejects
+with buttons inside Slack, which resumes the hook, and the agent relays the outcome back to the
 user in the chat UI.
 
 The workflow is durable: if the server restarts, redeploys, or the reviewer takes days to
-respond, the paused run and its state are unaffected.
+respond, the paused run and its state are unaffected. The **client** survives it too — the
+browser stores the run id and reconnects to that run's stream
+(`WorkflowChatTransport` + `/api/agent/[runId]/stream`), so closing the tab while an approval
+is pending doesn't lose the answer.
+
+## The agent looks things up; it does not take the customer's word
+
+Account facts come from tools, never from the conversation. `lookupCustomer` returns the
+authoritative refund history, `lookupOrder` confirms the order exists and its amount, and
+`issueRefund` is what actually moves money — an approval alone does nothing until it runs.
+
+This matters more than it sounds. Ask for a $50 refund while claiming *"I've never had a refund
+before,"* and the agent looks up the account, finds two refunds in the last 30 days, and
+escalates anyway — quoting the real number to the reviewer. A policy that reads the customer's
+own claims as evidence is a policy anyone can talk their way around.
 
 ## Approval scenarios (plain-text instructions)
 
@@ -48,9 +73,10 @@ agent's system prompt in [`lib/instructions/index.ts`](./lib/instructions/index.
   information is missing or contradictory, the agent asks the user first, and escalates to
   a human only if the user can't resolve it.
 
-The agent has a single tool, `requestHumanApproval` ([`lib/tools/index.ts`](./lib/tools/index.ts)),
-that the instructions above tell it when to call. It never approves high-risk actions on
-its own judgment — only the plain-text policy and a human reviewer can.
+All four tools live in [`lib/tools/index.ts`](./lib/tools/index.ts): `lookupCustomer`,
+`lookupOrder`, `issueRefund`, and `requestHumanApproval`. The instructions above are what tell
+the agent when to reach for each one. It never approves high-risk actions on its own judgment —
+only the plain-text policy and a human reviewer can.
 
 ## Stack
 
@@ -61,13 +87,27 @@ its own judgment — only the plain-text policy and a human reviewer can.
 - **AI SDK Gateway** — model specified as a plain string (`"openai/gpt-4o-mini"`), no
   provider-specific SDK required. Swappable to any Gateway model by editing
   `workflows/agent-workflow.ts`.
-- **Slack Incoming Webhook** — simplest possible integration for the human notification
-  step (no Slack app/OAuth setup required). The approval itself happens on a page in this
-  app (`/approve/[token]`), which the Slack message links to.
-- **Zod** — validates the tool's input and the approval hook's payload.
-- **oxlint** for linting, **TypeScript 7** for type-checking, **Vitest** (`@workflow/vitest`)
-  for integration tests, structured JSON logging (one contextual event per request —
-  `lib/logger.ts`).
+- **Slack interactive messages** — the reviewer approves or rejects with buttons in Slack.
+  The approval token travels in the button payload, which comes back inside Slack's
+  **signed** request (`lib/slack/verify.ts` checks the HMAC and rejects replays), so it never
+  appears in a browser URL, history entry, or screenshot. If only `SLACK_WEBHOOK_URL` is
+  configured, it falls back to posting a link to `/approve/[token]` — see
+  [Known limitations](#known-limitations) for why that path is weaker.
+- **Zod** — validates tool inputs and the approval hook's payload.
+- **oxlint** for linting, **TypeScript 7** for type-checking, **Vitest** for tests, structured
+  JSON logging (one contextual event per request — `lib/logger.ts`).
+
+## Hardening
+
+- **Signed approvals.** Only a request Slack signed, within a five-minute window, can resolve
+  an approval (`lib/slack/verify.ts`).
+- **Client input is treated as hostile.** The browser sends the whole conversation each turn,
+  so `lib/messages.ts` strips everything but user/assistant text — a client can't replay a
+  forged `"Approved by human reviewer"` tool result into the model's context to talk its way
+  past the policy.
+- **Rate limiting** on `/api/agent` (`lib/rate-limit.ts`) so an open endpoint can't burn the
+  Gateway budget. Per-instance only; a real deployment would back it with Redis.
+- **Tokens are never logged in full** — logs carry a short prefix (`redactToken`).
 
 ## Known limitations
 
@@ -87,7 +127,18 @@ its own judgment — only the plain-text policy and a human reviewer can.
 - The human-in-the-loop step depends on a human actually being reachable on Slack. There's no
   timeout/escalation-to-a-second-reviewer path — the workflow will wait indefinitely (which
   Workflow DevKit supports natively, at zero cost while paused).
-- **`pnpm test` currently times out** — this is an upstream bug, not an issue with the code
+- **The web approval fallback (`/approve/[token]`) is the weaker path**, kept only for setups
+  with just an incoming webhook. It puts the approval token in a URL, which means it lands in
+  browser history and any screenshot of the page; `noindex` + `no-referrer` limit the blast
+  radius but don't remove it. The Slack-button path avoids the problem entirely rather than
+  mitigating it, which is why it's the default whenever `SLACK_BOT_TOKEN` and
+  `SLACK_CHANNEL_ID` are set.
+- **Slack's Request URL must be reachable from the internet**, so the interactive buttons only
+  work against a deployment. Locally, buttons still render but resolve against whatever URL the
+  Slack app points at — use the web fallback for local testing.
+- The customer identity is a constant (`DEMO_CUSTOMER_ID`) because the demo has no login. Real
+  deployments would resolve it from the session; the tools already take a customer id.
+- **`pnpm test:integration` currently times out** — this is an upstream bug, not an issue with the code
   under test or the tests themselves. `workflow@4.8.5`'s local dev "world" runtime (used by
   `@workflow/vitest`) fails with `ERR_IMPORT_ATTRIBUTE_MISSING` while loading a bundled copy
   of `builtin-modules/builtin-modules.json`, even though that package's own source correctly
@@ -107,8 +158,8 @@ pnpm dev
 ```
 
 Other scripts: `pnpm lint` (oxlint), `pnpm typecheck` (`tsc --noEmit`), `pnpm build`,
-`pnpm test` / `pnpm test:watch` (integration tests — see
-[Known limitations](#known-limitations) for a current upstream blocker).
+`pnpm test` / `pnpm test:watch` (unit tests), and `pnpm test:integration` (workflow-level
+suite — see [Known limitations](#known-limitations) for a current upstream blocker).
 
 Environment variables (see [`env.sample.txt`](./env.sample.txt) for the template — copy it
 to `.env.local`):
@@ -117,8 +168,11 @@ to `.env.local`):
 |---|---|---|
 | `AI_GATEWAY_API_KEY` | Yes | [Vercel AI Gateway](https://vercel.com/docs/ai-gateway) key. |
 | `AGENT_MODEL` | No | AI Gateway model string passed to `DurableAgent`. Defaults to `"openai/gpt-4o-mini"` (works on the Gateway free tier). Swap to `"anthropic/claude-sonnet-5"` or similar for stricter tool-use policy adherence — see [Known limitations](#known-limitations). |
-| `SLACK_WEBHOOK_URL` | No | A Slack [Incoming Webhook](https://api.slack.com/messaging/webhooks) URL. If unset, the approval link is logged to the server console instead — useful for local testing without a Slack workspace. |
-| `APP_URL` | No | Public base URL used to build the `/approve/[token]` link sent to Slack. Defaults to `http://localhost:3000`. |
+| `SLACK_BOT_TOKEN` | No | Bot token (`xoxb-…`) with `chat:write`. Set together with `SLACK_CHANNEL_ID` to get interactive approval buttons in Slack (the preferred path). |
+| `SLACK_CHANNEL_ID` | No | Channel the approval message is posted to (e.g. `C09…`). |
+| `SLACK_SIGNING_SECRET` | Yes, with buttons | Verifies that interactivity requests really came from Slack. Without it, `/api/slack/interactivity` refuses every request. |
+| `SLACK_WEBHOOK_URL` | No | Incoming webhook, used only as a fallback when the bot token/channel aren't set. Posts a link to the web approval page. With no Slack config at all, the approval link is logged to the server console (non-production only) so local testing still works. |
+| `APP_URL` | No | Public base URL used to build the fallback `/approve/[token]` link. Defaults to `http://localhost:3000`. |
 | `REFUND_AUTO_APPROVE_MAX_USD` | No | Refund auto-approval ceiling. Defaults to `100`. |
 | `REFUND_MAX_MONTHLY_COUNT` | No | Refund count in 30 days that forces escalation regardless of amount. Defaults to `2`. |
 | `HIGH_VALUE_THRESHOLD_USD` | No | Amount at/above which any operation requires human approval. Defaults to `1000`. |
