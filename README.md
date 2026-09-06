@@ -6,6 +6,11 @@ over Slack, built with Next.js and Vercel's [Workflow DevKit](https://workflow-s
 
 Built as the take-home for the Forward Deployed Engineer role at [Plaude](https://plaude.com).
 
+**Live**: https://plaude-challenge-five.vercel.app — the chat UI needs `AI_GATEWAY_API_KEY`
+(and optionally `SLACK_WEBHOOK_URL`) set as Vercel project env vars to fully function; the
+[interactive flow diagram](https://plaude-challenge-five.vercel.app/hitl-flow.html) works
+regardless.
+
 ## What it does
 
 The agent handles customer operations requests (refunds, high-value operations, ambiguous
@@ -16,36 +21,14 @@ is paused for days.
 
 ## Human-in-the-loop flow
 
-```
-User types a request in the Next.js UI
-        │
-        ▼
-POST /api/agent  ─────────────►  start(agentWorkflow)
-                                        │
-                              DurableAgent reads the plain-text
-                              policy and decides: auto-resolve,
-                              ask the user for more info, or escalate
-                                        │
-                         (escalation) requestHumanApproval tool
-                                        │
-                         1. Sends a Slack message with a link
-                            to /approve/[token]
-                         2. Creates a workflow hook and
-                            SUSPENDS — consumes no resources
-                                        │
-                                        ▼
-                    Human opens the Slack link, approves/rejects
-                                        │
-                                        ▼
-                    POST /api/hooks/approval  ──►  hook.resume(token, decision)
-                                        │
-                                        ▼
-                    Workflow resumes, agent relays the outcome
-                    back to the user in the chat UI
-```
+**[Live interactive diagram →](https://plaude-challenge-five.vercel.app/hitl-flow.html)**
+(pan/zoom, dark/light, no login required). Source: `public/hitl-flow.html`.
 
-An interactive version of this diagram (pan/zoom, dark/light) is at
-[`docs/hitl-flow.html`](./docs/hitl-flow.html) — open it directly in a browser.
+In short: the user's request starts a durable workflow; if the plain-text policy requires
+sign-off, the agent's `requestHumanApproval` tool notifies a human on Slack and suspends the
+workflow on a hook — consuming zero resources while it waits. The human approves or rejects
+via `/approve/[token]`, which resumes the hook, and the agent relays the outcome back to the
+user in the chat UI.
 
 The workflow is durable: if the server restarts, redeploys, or the reviewer takes days to
 respond, the paused run and its state are unaffected.
