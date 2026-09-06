@@ -24,6 +24,8 @@ Three messages, three different paths through the policy:
 The first one matters as much as the others: an agent that escalates everything is just a
 slower form of doing nothing.
 
+![The agent resolving a refund without involving a human](./docs/images/auto-approved.png)
+
 > **On the hosted link, the escalations go to my Slack workspace**, so you'll see the agent pause
 > and wait, but you can't answer it. To drive the human step yourself, run it locally with your
 > own Slack app — [setup below](#running-it), about five minutes — or point
@@ -44,25 +46,9 @@ suspends the workflow on a hook. Redeploy the app, restart the server, wait thre
 and its state are untouched. The browser survives it too: it remembers the run id and reconnects
 to that run's stream, so closing the tab with an approval pending doesn't lose the answer.
 
-```
-customer  →  /api/agent  →  DurableAgent reads the policy
-                                   │
-                          looks up account + order
-                                   │
-                    ┌──────────────┴──────────────┐
-              within policy                 needs a human
-                    │                              │
-              issueRefund              Slack message with buttons
-                    │                              │
-                    │                     ⏸  run suspends
-                    │                              │
-                    │                     reviewer clicks Approve
-                    │                              │
-                    │                   signed callback resumes hook
-                    └──────────────┬──────────────┘
-                                   │
-                        agent replies to the customer
-```
+[![Human-in-the-loop approval flow](./docs/images/architecture.png)](https://plaude-challenge-five.vercel.app/hitl-flow.html)
+
+*[Open the interactive version →](https://plaude-challenge-five.vercel.app/hitl-flow.html)*
 
 ## The policy
 
