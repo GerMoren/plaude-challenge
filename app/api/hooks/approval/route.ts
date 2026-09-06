@@ -1,6 +1,6 @@
 import { approvalHook } from "@/lib/hooks/approval-hook";
 import { z } from "zod";
-import { logger } from "@/lib/logger";
+import { logger, redactToken } from "@/lib/logger";
 
 const bodySchema = z.object({
   token: z.string().min(1),
@@ -38,7 +38,7 @@ export async function POST(request: Request) {
   }
 
   const { token, approved, comment } = parseResult.data;
-  event.token = token;
+  event.token = redactToken(token);
   event.approved = approved;
   event.has_comment = Boolean(comment);
 

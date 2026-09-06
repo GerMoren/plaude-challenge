@@ -55,6 +55,7 @@ its own judgment — only the plain-text policy and a human reviewer can.
 ## Stack
 
 - **Next.js** (App Router) — chat UI (`useChat`) and API routes.
+- **shadcn/ui** + Tailwind — chat bubbles, approval alerts, and forms.
 - **Workflow DevKit** (`workflow`, `@workflow/ai`) — `"use workflow"` / `"use step"`
   directives, `DurableAgent`, and `defineHook()` for the durable pause/resume.
 - **AI SDK Gateway** — model specified as a plain string (`"openai/gpt-4o-mini"`), no

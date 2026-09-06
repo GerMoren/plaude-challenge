@@ -1,62 +1,89 @@
 "use client";
 
 import { useState } from "react";
+import { Button } from "@/components/ui/button";
+import { Textarea } from "@/components/ui/textarea";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { CheckCircle2, XCircle, AlertTriangle } from "lucide-react";
 
 export function ApprovalForm({ token }: { token: string }) {
   const [comment, setComment] = useState("");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [result, setResult] = useState<"approved" | "rejected" | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   async function submit(approved: boolean) {
     setIsSubmitting(true);
+    setError(null);
     try {
       const response = await fetch("/api/hooks/approval", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ token, approved, comment }),
       });
-      if (!response.ok) throw new Error(`Request failed: ${response.status}`);
+      if (!response.ok) {
+        const body = await response.json().catch(() => null);
+        throw new Error(body?.error ?? `Request failed: ${response.status}`);
+      }
       setResult(approved ? "approved" : "rejected");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
     } finally {
       setIsSubmitting(false);
     }
   }
 
   if (result) {
+    const approved = result === "approved";
     return (
-      <p className="rounded border p-4 text-sm">
-        Decision recorded: <strong>{result}</strong>. The agent will resume
-        automatically.
-      </p>
+      <Alert
+        className={
+          approved
+            ? "border-emerald-300/60 bg-emerald-500/10 [&>svg]:text-emerald-600 dark:[&>svg]:text-emerald-400"
+            : "border-red-300/60 bg-red-500/10 [&>svg]:text-red-600 dark:[&>svg]:text-red-400"
+        }
+      >
+        {approved ? <CheckCircle2 className="h-4 w-4" /> : <XCircle className="h-4 w-4" />}
+        <AlertTitle>Decision recorded: {result}</AlertTitle>
+        <AlertDescription>The agent will resume automatically.</AlertDescription>
+      </Alert>
     );
   }
 
   return (
     <div className="flex flex-col gap-4">
-      <textarea
+      {error && (
+        <Alert className="border-red-300/60 bg-red-500/10 [&>svg]:text-red-600 dark:[&>svg]:text-red-400">
+          <AlertTriangle className="h-4 w-4" />
+          <AlertTitle>Couldn&apos;t submit your decision</AlertTitle>
+          <AlertDescription>{error}</AlertDescription>
+        </Alert>
+      )}
+
+      <Textarea
         value={comment}
         onChange={(e) => setComment(e.target.value)}
         placeholder="Add a comment (optional)..."
-        className="w-full rounded border p-2 text-sm"
         rows={3}
+        disabled={isSubmitting}
       />
       <div className="flex gap-2">
-        <button
+        <Button
           type="button"
           onClick={() => submit(true)}
           disabled={isSubmitting}
-          className="rounded bg-green-600 px-4 py-2 text-white hover:bg-green-700 disabled:opacity-50"
+          className="flex-1 bg-emerald-600 text-white hover:bg-emerald-700"
         >
           Approve
-        </button>
-        <button
+        </Button>
+        <Button
           type="button"
           onClick={() => submit(false)}
           disabled={isSubmitting}
-          className="rounded bg-red-600 px-4 py-2 text-white hover:bg-red-700 disabled:opacity-50"
+          className="flex-1 bg-red-600 text-white hover:bg-red-700"
         >
           Reject
-        </button>
+        </Button>
       </div>
     </div>
   );

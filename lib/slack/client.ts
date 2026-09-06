@@ -1,4 +1,4 @@
-import { logger } from "@/lib/logger";
+import { logger, redactToken } from "@/lib/logger";
 
 export async function sendSlackApprovalRequest({
   token,
@@ -14,7 +14,7 @@ export async function sendSlackApprovalRequest({
   const startedAt = Date.now();
   const event: Record<string, unknown> = {
     route: "sendSlackApprovalRequest",
-    token,
+    token: redactToken(token),
     scenario,
   };
 
@@ -24,7 +24,11 @@ export async function sendSlackApprovalRequest({
 
   if (!webhookUrl) {
     event.outcome = "webhook_not_configured";
-    event.approval_url = approvalUrl;
+    // Only surface the full (token-bearing) URL outside production, so local
+    // dev can still test the flow without a Slack workspace configured.
+    if (process.env.NODE_ENV !== "production") {
+      event.approval_url = approvalUrl;
+    }
     event.duration_ms = Date.now() - startedAt;
     logger.error(event);
     return;
