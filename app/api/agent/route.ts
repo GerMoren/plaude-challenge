@@ -14,7 +14,9 @@ export async function POST(req: Request) {
 
   const clientId =
     req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
-  const rate = checkRateLimit(clientId);
+  // Keyed by route + client: sending a message and reconnecting a stream are
+  // different kinds of load and shouldn't share one budget.
+  const rate = checkRateLimit(`agent:${clientId}`);
   if (!rate.allowed) {
     event.outcome = "rate_limited";
     event.status_code = 429;
@@ -82,9 +84,8 @@ export async function POST(req: Request) {
     event.duration_ms = Date.now() - startedAt;
     logger.error(event);
 
-    return Response.json(
-      { error: error instanceof Error ? error.message : "Failed to start agent workflow" },
-      { status: 500 },
-    );
+    // The detail is logged above; the client gets a generic message so an
+    // infrastructure failure doesn't hand out internal error text.
+    return Response.json({ error: "Failed to start the agent. Try again." }, { status: 500 });
   }
 }

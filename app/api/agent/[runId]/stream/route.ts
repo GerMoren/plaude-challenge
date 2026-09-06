@@ -1,6 +1,7 @@
 import { createUIMessageStreamResponse } from "ai";
 import { getRun } from "workflow/api";
 import { logger } from "@/lib/logger";
+import { checkRateLimit } from "@/lib/rate-limit";
 
 // How far back we'll scan for a step boundary before giving up and resuming
 // where we were asked to. Bounds the cost of a single very long step.
@@ -48,6 +49,16 @@ export async function GET(
   { params }: { params: Promise<{ runId: string }> },
 ) {
   const { runId } = await params;
+
+  const clientId = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? "unknown";
+  const rate = checkRateLimit(`agent-stream:${clientId}`);
+  if (!rate.allowed) {
+    return Response.json(
+      { error: "Too many requests. Try again in a moment." },
+      { status: 429, headers: { "retry-after": String(rate.retryAfterSeconds) } },
+    );
+  }
+
   const { searchParams } = new URL(request.url);
   const startIndexParam = searchParams.get("startIndex");
   const requested = startIndexParam ? Number.parseInt(startIndexParam, 10) : 0;

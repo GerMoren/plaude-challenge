@@ -9,13 +9,13 @@ type Bucket = { count: number; resetAt: number };
 const buckets = new Map<string, Bucket>();
 
 export function checkRateLimit(
-  clientId: string,
+  key: string,
   now = Date.now(),
 ): { allowed: boolean; retryAfterSeconds: number } {
-  const bucket = buckets.get(clientId);
+  const bucket = buckets.get(key);
 
   if (!bucket || now >= bucket.resetAt) {
-    buckets.set(clientId, { count: 1, resetAt: now + WINDOW_MS });
+    buckets.set(key, { count: 1, resetAt: now + WINDOW_MS });
     return { allowed: true, retryAfterSeconds: 0 };
   }
 
